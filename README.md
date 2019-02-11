@@ -1,6 +1,9 @@
 # config
 
 [![Build Status](https://travis-ci.org/metaleaf-io/config.svg)](https://travis-ci.org/metaleaf-io/config)
+[![GoDoc](https://godoc.org/github.com/metaleaf-io/config/github?status.svg)](https://godoc.org/github.com/metaleaf-io/config)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+[![Go version](https://img.shields.io/badge/go-~%3E1.11.4-green.svg)](https://golang.org/doc/devel/release.html#go1.11)
 
 After a search for a *simple* application configuration parser turned up
 many complex libraries, I decided to write my own.
