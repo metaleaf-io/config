@@ -25,7 +25,10 @@ import (
 	"fmt"
 	"github.com/ghodss/yaml"
 	"io/ioutil"
+	"os"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -35,41 +38,86 @@ import (
 // Errors reading the file, decoding the file, or if the file is of an
 // unexpected type are returned.
 func FromFile(path string, konf interface{}) error {
+	buf, err := ioutil.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
 	t := strings.ToLower(filepath.Ext(path))
 	if t == ".json" {
-		return fromJson(path, konf)
+		return fromJson(buf, konf)
 	} else if t == ".yaml" || t == ".yml" {
-		return fromYaml(path, konf)
+		return fromYaml(buf, konf)
 	} else {
 		return fmt.Errorf("unexpected file format: %s", t)
 	}
 }
 
 // Decodes a JSON file into the configuration object.
-func fromJson(path string, konf interface{}) error {
-	buf, err := ioutil.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
+func fromJson(buf []byte, konf interface{}) error {
 	decoder := json.NewDecoder(bytes.NewReader(buf))
 	if err := decoder.Decode(&konf); err != nil {
-		return fmt.Errorf("while decoding JSON: %v", err)
+		return fmt.Errorf("config: while decoding JSON: %v", err)
 	}
 
-	return nil
+	return fromEnvironment(konf)
 }
 
 // Decodes a YAML file into the configuration object.
-func fromYaml(path string, konf interface{}) error {
-	buf, err := ioutil.ReadFile(path)
+func fromYaml(buf []byte, konf interface{}) error {
+	err := yaml.Unmarshal(buf, &konf)
 	if err != nil {
-		return err
+		return fmt.Errorf("config: while decoding YAML: %v", err)
 	}
 
-	err = yaml.Unmarshal(buf, &konf)
-	if err != nil {
-		return err
+	return fromEnvironment(konf)
+}
+
+func fromEnvironment(konf interface{}) error {
+	valueOfKonf := reflect.ValueOf(konf).Elem()
+	typeOfKonf := reflect.TypeOf(konf).Elem()
+
+	for i := 0; i < valueOfKonf.NumField(); i++  {
+		valueOfField := valueOfKonf.Field(i)
+		if valueOfField.Kind() == reflect.Struct && valueOfField.CanInterface() {
+			// Depth-first search for fields.
+			err := fromEnvironment(valueOfField.Addr().Interface())
+			if err != nil {
+				return err
+			}
+		}
+
+		// If the field contains an `env` tag, attempt to load the value from the environment.
+		typeOfField := typeOfKonf.Field(i)
+		tag, ok := typeOfField.Tag.Lookup("env")
+		if ok {
+			val, ok := os.LookupEnv(tag)
+			if ok {
+				// Convert the value to match the field and set it.
+				switch valueOfField.Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					x, err := strconv.ParseInt(val, 10, 64)
+					if err != nil {
+						return err
+					}
+					valueOfField.SetInt(x)
+				case reflect.Bool:
+					x, err := strconv.ParseBool(val)
+					if err != nil {
+						return err
+					}
+					valueOfField.SetBool(x)
+				case reflect.Float32, reflect.Float64:
+					x, err := strconv.ParseFloat(val, 64)
+					if err != nil {
+						return err
+					}
+					valueOfField.SetFloat(x)
+				case reflect.String:
+					valueOfField.SetString(val)
+				}
+			}
+		}
 	}
 
 	return nil

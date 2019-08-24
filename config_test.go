@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"testing"
 )
 
@@ -36,6 +38,41 @@ func TestFromYamlFile(t *testing.T) {
 	var k = new(testConfig)
 	var err = FromFile("config_test.yaml", k)
 	if err != nil {
+		t.Fail()
+	}
+}
+
+func TestWithEnvOverride(t *testing.T) {
+	expected := 98765
+	_ = os.Setenv("NUM", strconv.Itoa(expected))
+
+	// Nested structure to test.
+	type testStruct struct {
+		Str string `json:"str"`
+		Num int    `json:"num" env:"NUM"`
+		Nested struct {
+			Str string `json:"str"`
+			Num int    `json:"num" env:"NUM"`
+		}
+	}
+
+	jsonString := "{\"str\":\"foobar\",\"num\":-1111,\"nested\":{\"str\":\"deadbeef\",\"num\":-2222}}"
+
+	ts := new(testStruct)
+
+	err := fromJson([]byte(jsonString), ts)
+	if err != nil {
+		t.Log(err)
+		t.Fail()
+	}
+
+	if ts.Num != 98765 {
+		t.Log("expected:", expected, "actual:", ts.Num)
+		t.Fail()
+	}
+
+	if ts.Nested.Num != 98765 {
+		t.Log("expected:", expected, "actual:", ts.Nested.Num)
 		t.Fail()
 	}
 }
@@ -84,7 +121,7 @@ func validate(k *testConfig, t *testing.T) {
 // struct tags are not necessary.
 type AppConfig struct {
 	Server struct {
-		Port int16
+		Port int16 `env:"PORT"`
 	}
 	Database struct {
 		Driver   string
@@ -98,11 +135,12 @@ type AppConfig struct {
 
 // Reads the AppConfig data from config_example.yaml and prints it.
 func ExampleFromFile() {
+	os.Setenv("PORT", "9000")
 	var c = new(AppConfig)
 	if err := FromFile("config_example.yaml", c); err != nil {
 		fmt.Printf("Error: %v", err)
 	}
 
 	fmt.Printf("%+v\n", *c)
-	// OUTPUT: {Server:{Port:8080} Database:{Driver:postgres Hostname:localhost Port:5432 Username:postgres Password:dummy Name:my_database}}
+	// OUTPUT: {Server:{Port:9000} Database:{Driver:postgres Hostname:localhost Port:5432 Username:postgres Password:dummy Name:my_database}}
 }
